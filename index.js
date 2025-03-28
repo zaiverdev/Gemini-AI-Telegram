@@ -9,8 +9,12 @@ const GEMINI_API_KEY = 'AIzaSyCGpkQ95zwAfAEhbHDXaot1tDUqWR5uzno';
 const TEXT_MODEL_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=${GEMINI_API_KEY}`;
 const IMAGE_MODEL_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${GEMINI_API_KEY}`;
 
-// Inisialisasi bot
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+// Inisialisasi bot dengan opsi pemrosesan perintah yang tepat
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, {
+  polling: true,
+  filepath: false,
+  baseApiUrl: 'https://api.telegram.org'
+});
 
 console.log('Bot sedang berjalan...');
 
@@ -53,13 +57,17 @@ async function generateImage(prompt) {
   );
 
   // Ekstrak data gambar dari respons
-  const imageData = response.data.candidates[0].content.parts
-    .find(part => part.inlineData).inlineData.data;
+  const imagePart = response.data.candidates[0].content.parts.find(part => part.inlineData);
+  if (!imagePart) {
+    throw new Error('Tidak mendapatkan data gambar dari API');
+  }
+  
+  const imageData = imagePart.inlineData.data;
   
   // Simpan gambar ke file sementara
   const tempDir = './temp';
   if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir);
+    fs.mkdirSync(tempDir, { recursive: true });
   }
   
   const imagePath = path.join(tempDir, `generated_${Date.now()}.png`);
@@ -68,64 +76,117 @@ async function generateImage(prompt) {
   return imagePath;
 }
 
-// Tangani pesan masuk
+// Tangani perintah /start
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  const welcomeMessage = `
+🤖 *Selamat datang di AI Bot!*
+
+Saya bisa membantu Anda dengan:
+- Chat biasa: cukup ketik pesan
+- Buat gambar: gunakan perintah /image [deskripsi]
+
+Contoh:
+/image lukisan minyak pemandangan desa di sore hari
+  `;
+  
+  bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
+});
+
+// Tangani perintah /help
+bot.onText(/\/help/, (msg) => {
+  const chatId = msg.chat.id;
+  const helpMessage = `
+🆘 *Bantuan*
+
+Perintah yang tersedia:
+/start - Memulai bot
+/help - Menampilkan pesan bantuan
+/image [deskripsi] - Membuat gambar berdasarkan deskripsi
+
+Untuk chat biasa, cukup ketik pesan Anda.
+  `;
+  
+  bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
+});
+
+// Tangani perintah /image
+bot.onText(/\/image (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const prompt = match[1];
+
+  try {
+    await bot.sendChatAction(chatId, 'upload_photo');
+    const processingMessage = await bot.sendMessage(
+      chatId, 
+      `🖌️ Membuat gambar berdasarkan: "${prompt}"...`,
+      { reply_to_message_id: msg.message_id }
+    );
+
+    const imagePath = await generateImage(prompt);
+    
+    await bot.sendPhoto(
+      chatId, 
+      fs.readFileSync(imagePath), 
+      {
+        caption: `🎨 Hasil gambar untuk: "${prompt}"`,
+        reply_to_message_id: msg.message_id
+      }
+    );
+    
+    // Hapis pesan "processing" dan file sementara
+    await bot.deleteMessage(chatId, processingMessage.message_id);
+    fs.unlinkSync(imagePath);
+  } catch (error) {
+    console.error('Error generating image:', error);
+    
+    let errorMessage = '❌ Maaf, gagal membuat gambar. Silakan coba lagi dengan deskripsi yang berbeda.';
+    if (error.response?.data?.error) {
+      errorMessage += `\n\nDetail: ${error.response.data.error.message}`;
+    }
+    
+    await bot.sendMessage(
+      chatId, 
+      errorMessage,
+      { reply_to_message_id: msg.message_id }
+    );
+  }
+});
+
+// Tangani pesan teks biasa (bukan perintah)
 bot.on('message', async (msg) => {
+  // Abaikan jika pesan adalah perintah atau bukan teks
+  if (msg.text?.startsWith('/') || !msg.text) return;
+
   const chatId = msg.chat.id;
   const userMessage = msg.text;
 
   try {
-    if (!userMessage) {
-      await bot.sendMessage(chatId, 'Silakan kirim pesan teks.');
-      return;
-    }
-
     await bot.sendChatAction(chatId, 'typing');
-
-    // Deteksi perintah khusus untuk generate gambar
-    if (userMessage.startsWith('/image ')) {
-      const prompt = userMessage.substring(7);
-      
-      if (!prompt) {
-        await bot.sendMessage(chatId, 'Silakan sertakan prompt gambar setelah /image');
-        return;
-      }
-
-      // Kirim notifikasi sedang memproses
-      await bot.sendMessage(chatId, `Membuat gambar berdasarkan: "${prompt}"...`);
-      
-      // Generate gambar
-      const imagePath = await generateImage(prompt);
-      
-      // Kirim gambar ke pengguna
-      await bot.sendPhoto(chatId, fs.readFileSync(imagePath), {
-        caption: `Hasil gambar untuk: "${prompt}"`
-      });
-      
-      // Hapus file sementara
-      fs.unlinkSync(imagePath);
-    } else {
-      // Generate teks biasa
-      const responseText = await generateText(userMessage);
-      await bot.sendMessage(chatId, responseText);
-    }
+    
+    const responseText = await generateText(userMessage);
+    
+    await bot.sendMessage(
+      chatId, 
+      responseText,
+      { reply_to_message_id: msg.message_id }
+    );
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error processing text:', error);
     
-    let errorMessage = 'Maaf, terjadi kesalahan saat memproses permintaan Anda.';
-    if (error.response) {
-      errorMessage += ` (Status: ${error.response.status})`;
-    }
-    
-    await bot.sendMessage(chatId, errorMessage);
+    await bot.sendMessage(
+      chatId, 
+      '❌ Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.',
+      { reply_to_message_id: msg.message_id }
+    );
   }
 });
 
-// Tangani error polling
+// Tangani error
 bot.on('polling_error', (error) => {
   console.error('Polling error:', error);
 });
 
-// Tangani error lainnya
 process.on('unhandledRejection', (error) => {
   console.error('Unhandled rejection:', error);
 });
