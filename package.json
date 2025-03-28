@@ -1,27 +1,30 @@
 {
-  "name": "telegram-gemini-bot",
+  "name": "telegram-gemini-image-bot",
   "version": "1.0.0",
-  "description": "Telegram Bot using Google's Generative Language API (Gemma model)",
-  "main": "index.js",
+  "description": "Telegram bot that generates images using Google's Gemini API",
+  "main": "bot.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node bot.js",
+    "dev": "nodemon bot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "telegram",
     "bot",
     "gemini",
-    "gemma",
-    "ai"
+    "ai",
+    "image-generation"
   ],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
     "axios": "^1.6.7",
-    "node-telegram-bot-api": "^0.61.0",
-    "dotenv": "^16.4.1"
+    "node-telegram-bot-api": "^0.61.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
