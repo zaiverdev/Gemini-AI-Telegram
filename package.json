@@ -1,0 +1,27 @@
+{
+  "name": "telegram-gemini-bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot using Google's Generative Language API (Gemma model)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "gemini",
+    "gemma",
+    "ai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.7",
+    "node-telegram-bot-api": "^0.61.0",
+    "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
